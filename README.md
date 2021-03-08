@@ -1,2 +1,2 @@
 # pyhelpers
-Collection of bits and bops that are help in python
+Collection of bits and bops that are helpful in python

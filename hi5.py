@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-08 10:02:42
+# @Last Modified: 2021-03-10 11:05:29
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -20,6 +20,7 @@
 import os
 import sys
 import glob
+import numbers
 import h5py
 import numpy as np
 
@@ -259,7 +260,9 @@ class BetterDict(dict):
             else:
                 left = f"{sc}{var}"
                 right = f"{self[var].__class__.__name__}"
-                temp = f"{left}{' '*(52-len(left)-len(right))}{right}\n"
+                if isinstance(self[var], numbers.Number):
+                    right = f"{self[var]} ({right})"
+                temp = f"{left} {'.'*(70-len(left)-len(right))} {right}\n"
                 # temp = f"{left} ({right})\n"
             res += temp
 

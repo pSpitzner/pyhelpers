@@ -1,0 +1,14 @@
+dat/*
+mov/*
+exe/*
+log/*
+run/*.tsv
+__pycache__
+.DS_Store
+*.zip
+*.pyc
+*.svg
+*.pdf
+*.png
+.nfs*
+.ipynb_checkpoints

@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-17 15:59:57
+# @Last Modified: 2021-03-18 14:04:13
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -70,7 +70,7 @@ def load(filenames, dsetname, keepdim=False, raise_ex=False, silent=False):
             else:
                 return np.nan
 
-    files = glob.glob(filenames)
+    files = glob.glob(os.path.expanduser(filenames))
     res = []
     for f in files:
         res.append(local_load(f))
@@ -95,7 +95,7 @@ def ls(filename, dsetname="/"):
         list: containing the contained keys as strings
     """
     try:
-        file = h5py.File(filename, "r")
+        file = h5py.File(os.path.expanduser(filename), "r")
         try:
             res = list(file[dsetname].keys())
         except Exception as e:
@@ -115,7 +115,7 @@ def load_hot(filename, dsetname, keepdim=False):
         sometimes we do not want to hold the whole dataset in RAM, because it is too
         large. Remember to close the file after processing!
     """
-    file = h5py.File(filename, "r")
+    file = h5py.File(os.path.expanduser(filename), "r")
     global _h5_files_currently_open
     _h5_files_currently_open.append(file)
 

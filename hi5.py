@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-10 11:05:29
+# @Last Modified: 2021-03-17 15:59:57
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -128,11 +128,23 @@ def load_hot(filename, dsetname, keepdim=False):
         return file[dsetname]
 
 
-def close_hot():
+def close_hot(which="all"):
+    """
+        hot files require a bit of care:
+        * If a BetterDict is opened from a hot hdf5 file, and `all` hot files are closed, the datasets are no longer accessible.
+        * from the outside, it is hard to check whether an element is
+    """
     global _h5_files_currently_open
-    for file in _h5_files_currently_open:
-        file.close()
-    _h5_files_currently_open = []
+    if which == "all":
+        for file in _h5_files_currently_open:
+            try:
+                file.close()
+            except:
+                log.debug("File already closed")
+        _h5_files_currently_open = []
+    else:
+        _h5_files_currently_open[which].close()
+        del _h5_files_currently_open[which]
 
 
 def recursive_ls(filename, dsetname=""):

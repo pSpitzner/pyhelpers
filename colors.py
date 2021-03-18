@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2021-02-18 19:38:37
-# @Last Modified: 2021-02-22 17:55:20
+# @Last Modified: 2021-03-18 11:34:26
 # ------------------------------------------------------------------------------ #
 # Helper functions for dealing with colors
 # ------------------------------------------------------------------------------ #
@@ -215,3 +215,46 @@ def demo_cmap(palette="hot", Nmax=7, edge=True):
     fig.tight_layout()
 
     return fig, axes
+
+# this should go elsewhere
+def save_all_figures(path, **kwargs):
+    """
+        saves all open figures as pdfs and pickle. to load an existing figure:
+        ```
+        import pickle
+        with open('/path/to/fig.pkl','rb') as fid:
+            fig = pickle.load(fid)
+        ```
+    """
+    import os
+    path = os.path.expanduser(path)
+    assert os.path.isdir(path)
+
+    try:
+        import pickle
+        pickle_installed = True
+    except ImportError:
+        pickle_installed = False
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        def tqdm(*args):
+            return iter(*args)
+
+    if "dpi" not in kwargs:
+        kwargs["dpi"] = 300
+
+    for i in tqdm(plt.get_fignums()):
+        fig = plt.figure(i)
+        fig.savefig(f"{path}/figure_{i}.pdf", **kwargs)
+        if pickle_installed:
+            with open(f"{path}/figure_{i}.pkl",'wb') as fid:
+                pickle.dump(fig, fid)
+
+def load_fig_from_pickle(path):
+    import pickle
+    with open('/path/to/fig.pkl','rb') as fid:
+        fig = pickle.load(fid)
+
+    return fig

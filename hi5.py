@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-18 14:04:13
+# @Last Modified: 2021-03-21 13:28:32
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -210,7 +210,6 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False):
                     else:
                         temp[cp] = load(filename, cd)
 
-
     return res
 
 
@@ -255,35 +254,98 @@ class BetterDict(dict):
                     maxdepth = d
         return maxdepth + 1
 
+    # helper to call recursively and build the tree structure of the content
+    def __recursive_tree__(self, d=None, depth=0):
+        if d is None:
+            d = {key: [] for key in ["pcs", "scs", "varname", "varval", "vartype"]}
+            d["prev_pc"] = ""
+
+        for vdx, var in enumerate(self.varnames):
+            if vdx < len(self.varnames) - 1:
+                sc = "├── "
+                pc = "│   "
+            else:
+                sc = "└── "
+                pc = "    "
+
+            d["pcs"].append(d["prev_pc"])
+            d["scs"].append(sc)
+            d["varname"].append(var)
+
+            if isinstance(self[var], BetterDict):
+                # get all content of the dict, while incrementing the padding `pc`
+                d["vartype"].append("")
+                d["varval"].append("")
+                d["prev_pc"] += pc
+                self[var].__recursive_tree__(d, depth + 1)
+                d["prev_pc"] = d["prev_pc"][0:-4]
+            else:
+                # extract type and certain variables
+                d["vartype"].append(f"{self[var].__class__.__name__}")
+                # number
+                if isinstance(self[var], numbers.Number):
+                    d["varval"].append(str(self[var]))
+                # numpy byte strings
+                elif isinstance(self[var], np.bytes_):
+                    string = self[var].decode("UTF-8").replace("\n", " ")
+                    if len(string) > 14:
+                        string = f"{string:.11s}..."
+                    d["varval"].append(string)
+                # base strings
+                elif isinstance(self[var], str):
+                    string = self[var].replace("\n", " ")
+                    if len(string) > 14:
+                        string = f"{string:.11s}..."
+                    d["varval"].append(string)
+                # numpy arrays, print shape
+                elif isinstance(self[var], np.ndarray):
+                    d["varval"].append(f"{self[var].shape}")
+                # list, print length
+                elif isinstance(self[var], list):
+                    d["varval"].append(f"({len(self[var])})")
+
+                else:
+                    d["varval"].append("")
+
+        return d
+
     # printed representation
     def __repr__(self):
         res = ""
-        for vdx, var in enumerate(self.varnames):
-            if vdx == len(self.varnames) - 1:
-                sc = "└── "
-                pc = "     "
-            else:
-                sc = "├── "
-                pc = "│    "
-            if isinstance(self[var], BetterDict):
-                temp = repr(self[var])
-                temp = temp.replace("\n", f"\n{pc}", temp.count("\n") - 1)
-                temp = f"{sc}{var}\n{pc}" + temp
-            else:
-                left = f"{sc}{var}"
-                right = f"{self[var].__class__.__name__}"
-                if isinstance(self[var], numbers.Number):
-                    right = f"{self[var]} ({right})"
-                temp = f"{left} {'.'*(70-len(left)-len(right))} {right}\n"
-                # temp = f"{left} ({right})\n"
-            res += temp
+        d = self.__recursive_tree__()
+        for l in range(0, len(d["varname"])):
+            left = f"{d['pcs'][l]}{d['scs'][l]}{d['varname'][l]}"
+            right = f"{d['vartype'][l]}"
+            ws = " " if d["vartype"][l] is "" else "."
+            res += f"{left} {ws*(62-len(left)-len(right))} {right}"
+            res += f"  {d['varval'][l]}\n" if len(d["varval"][l]) > 0 else "\n"
 
         return res
+
+    # def __repr__(self):
+    #     res = ""
+    #     for vdx, var in enumerate(self.varnames):
+    #         if vdx == len(self.varnames) - 1:
+    #             sc = "└── "
+    #             pc = "     "
+    #         else:
+    #             sc = "├── "
+    #             pc = "│    "
+    #         if isinstance(self[var], BetterDict):
+    #             temp = repr(self[var])
+    #             temp = temp.replace("\n", f"\n{pc}", temp.count("\n") - 1)
+    #             temp = f"{sc}{var}\n{pc}" + temp
+    #         else:
+    #             left = f"{sc}{var}"
+    #             right = f"{self[var].__class__.__name__}"
+    #             if isinstance(self[var], numbers.Number):
+    #                 right = f"{self[var]} ({right})"
+    #             temp = f"{left} {'.'*(70-len(left)-len(right))} {right}\n"
+    #             # temp = f"{left} ({right})\n"
+    #         res += temp
+    #     return res
 
     # enable autocompletion. man this is beautiful!
     def __dir__(self):
         res = dir(type(self)) + list(self.varnames)
         return res
-
-
-

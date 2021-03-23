@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-23 09:49:56
+# @Last Modified: 2021-03-23 20:44:49
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -107,18 +107,25 @@ def ls(filename, dsetname="/"):
     return res
 
 
-_h5_files_currently_open = []
+_h5_files_currently_open = dict(files=[], filenames=[])
 
 
 def load_hot(filename, dsetname, keepdim=False):
     """
         sometimes we do not want to hold the whole dataset in RAM, because it is too
         large. Remember to close the file after processing!
+
+        hmmm, two lists where indices have to match seem a bit fragile
     """
-    file = h5py.File(os.path.expanduser(filename), "r")
     global _h5_files_currently_open
-    if file not in _h5_files_currently_open:
-        _h5_files_currently_open.append(file)
+    filename = os.path.expanduser(filename)
+    if filename not in _h5_files_currently_open['filenames']:
+        file = h5py.File(filename, "r")
+        _h5_files_currently_open['files'].append(file)
+        _h5_files_currently_open['filenames'].append(filename)
+    else:
+        idx = _h5_files_currently_open['filenames'].index(filename)
+        file = _h5_files_currently_open['files'][idx]
 
     # if its a single value, load it nonetheless
     if file[dsetname].shape == (1,) and not keepdim:
@@ -137,15 +144,17 @@ def close_hot(which="all"):
     """
     global _h5_files_currently_open
     if which == "all":
-        for file in _h5_files_currently_open:
+        for file in _h5_files_currently_open['files']:
             try:
                 file.close()
             except:
                 log.debug("File already closed")
-        _h5_files_currently_open = []
+        _h5_files_currently_open['files'] = []
+        _h5_files_currently_open['filenames'] = []
     else:
-        _h5_files_currently_open[which].close()
-        del _h5_files_currently_open[which]
+        _h5_files_currently_open['files'][which].close()
+        del _h5_files_currently_open['files'][which]
+        del _h5_files_currently_open['filenames'][which]
 
 
 def recursive_ls(filename, dsetname=""):

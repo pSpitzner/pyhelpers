@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-21 13:28:32
+# @Last Modified: 2021-03-23 09:49:56
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -117,7 +117,8 @@ def load_hot(filename, dsetname, keepdim=False):
     """
     file = h5py.File(os.path.expanduser(filename), "r")
     global _h5_files_currently_open
-    _h5_files_currently_open.append(file)
+    if file not in _h5_files_currently_open:
+        _h5_files_currently_open.append(file)
 
     # if its a single value, load it nonetheless
     if file[dsetname].shape == (1,) and not keepdim:

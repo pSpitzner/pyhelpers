@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2021-02-18 19:38:37
-# @Last Modified: 2021-03-18 11:34:26
+# @Last Modified: 2021-03-24 08:43:33
 # ------------------------------------------------------------------------------ #
 # Helper functions for dealing with colors
 # ------------------------------------------------------------------------------ #
@@ -249,8 +249,12 @@ def save_all_figures(path, **kwargs):
         fig = plt.figure(i)
         fig.savefig(f"{path}/figure_{i}.pdf", **kwargs)
         if pickle_installed:
-            with open(f"{path}/figure_{i}.pkl",'wb') as fid:
-                pickle.dump(fig, fid)
+            try:
+                os.makedirs(f"{path}/pickle/", exist_ok=True)
+                with open(f"{path}/pickle/figure_{i}.pkl",'wb') as fid:
+                    pickle.dump(fig, fid)
+            except Exception as e:
+                print(e)
 
 def load_fig_from_pickle(path):
     import pickle

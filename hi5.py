@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-23 20:44:49
+# @Last Modified: 2021-03-26 12:19:50
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -119,13 +119,13 @@ def load_hot(filename, dsetname, keepdim=False):
     """
     global _h5_files_currently_open
     filename = os.path.expanduser(filename)
-    if filename not in _h5_files_currently_open['filenames']:
+    if filename not in _h5_files_currently_open["filenames"]:
         file = h5py.File(filename, "r")
-        _h5_files_currently_open['files'].append(file)
-        _h5_files_currently_open['filenames'].append(filename)
+        _h5_files_currently_open["files"].append(file)
+        _h5_files_currently_open["filenames"].append(filename)
     else:
-        idx = _h5_files_currently_open['filenames'].index(filename)
-        file = _h5_files_currently_open['files'][idx]
+        idx = _h5_files_currently_open["filenames"].index(filename)
+        file = _h5_files_currently_open["files"][idx]
 
     # if its a single value, load it nonetheless
     if file[dsetname].shape == (1,) and not keepdim:
@@ -140,21 +140,34 @@ def close_hot(which="all"):
     """
         hot files require a bit of care:
         * If a BetterDict is opened from a hot hdf5 file, and `all` hot files are closed, the datasets are no longer accessible.
-        * from the outside, it is hard to check whether an element is
+        * from the outside, currently it is hard to check whether an element of a BeterDict is loaded
     """
     global _h5_files_currently_open
+    # everything we opened
     if which == "all":
-        for file in _h5_files_currently_open['files']:
+        for file in _h5_files_currently_open["files"]:
             try:
                 file.close()
             except:
                 log.debug("File already closed")
-        _h5_files_currently_open['files'] = []
-        _h5_files_currently_open['filenames'] = []
-    else:
-        _h5_files_currently_open['files'][which].close()
-        del _h5_files_currently_open['files'][which]
-        del _h5_files_currently_open['filenames'][which]
+        _h5_files_currently_open["files"] = []
+        _h5_files_currently_open["filenames"] = []
+    # by index
+    elif isinstance(which, int):
+        _h5_files_currently_open["files"][which].close()
+        del _h5_files_currently_open["files"][which]
+        del _h5_files_currently_open["filenames"][which]
+    # by passed hdf5 file handle
+    elif isinstance(which, h5py.File):
+        _h5_files_currently_open["files"].remove(which)
+        _h5_files_currently_open["filenames"].remove(which.filename)
+        which.close()
+
+def remember_file_is_hot(file):
+    # manual helper to keep a collection of open files
+    global _h5_files_currently_open
+    _h5_files_currently_open["files"].append(file)
+    _h5_files_currently_open["filenames"].append(file.filename)
 
 
 def recursive_ls(filename, dsetname=""):
@@ -191,6 +204,11 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False):
 
     cd_len = []
     res = BetterDict()
+    res._set_h5_filename(filename)
+    if hot:
+        f = h5py.File(filename, "r")
+        res._set_h5_file(f)
+        remember_file_is_hot(f)
 
     maxdepth = 0
     for cd in candidates:
@@ -248,7 +266,7 @@ class BetterDict(dict):
 
     # copy everything
     def __deepcopy__(self, memo=None):
-        return SimulationResult(copy.deepcopy(dict(self), memo=memo))
+        return BetterDict(copy.deepcopy(dict(self), memo=memo))
 
     @property
     def varnames(self):
@@ -313,7 +331,15 @@ class BetterDict(dict):
                 # list, print length
                 elif isinstance(self[var], list):
                     d["varval"].append(f"({len(self[var])})")
-
+                # hdf5 datset
+                elif isinstance(self[var], h5py.Dataset):
+                    try:
+                        # this will throw an exception if file is closed
+                        self[var].file
+                        d["varval"].append(f"{self[var].shape}")
+                    except ValueError:
+                        d["varval"].append(f"(file closed)")
+                # unknown
                 else:
                     d["varval"].append("")
 
@@ -332,30 +358,38 @@ class BetterDict(dict):
 
         return res
 
-    # def __repr__(self):
-    #     res = ""
-    #     for vdx, var in enumerate(self.varnames):
-    #         if vdx == len(self.varnames) - 1:
-    #             sc = "└── "
-    #             pc = "     "
-    #         else:
-    #             sc = "├── "
-    #             pc = "│    "
-    #         if isinstance(self[var], BetterDict):
-    #             temp = repr(self[var])
-    #             temp = temp.replace("\n", f"\n{pc}", temp.count("\n") - 1)
-    #             temp = f"{sc}{var}\n{pc}" + temp
-    #         else:
-    #             left = f"{sc}{var}"
-    #             right = f"{self[var].__class__.__name__}"
-    #             if isinstance(self[var], numbers.Number):
-    #                 right = f"{self[var]} ({right})"
-    #             temp = f"{left} {'.'*(70-len(left)-len(right))} {right}\n"
-    #             # temp = f"{left} ({right})\n"
-    #         res += temp
-    #     return res
-
     # enable autocompletion. man this is beautiful!
     def __dir__(self):
         res = dir(type(self)) + list(self.varnames)
         return res
+
+    # ------------------------------------------------------------------------------ #
+    # hdf5 related vodoo
+    # ------------------------------------------------------------------------------ #
+
+    # because we overloaded attributes with dict items, we cannot "store" any new
+    # attributes.
+    # workaround: have dummy object as an attribute for h5 stuff,
+    # where we can add attributes.
+    __h5__ = type('BetterDict_hdf5_attributes', (object,), {})()
+    __h5__.file = None
+    __h5__.filename = None
+
+    @property
+    def h5_file(self):
+        return self.__h5__.file
+
+    @property
+    def h5_filename(self):
+        # for now, do not simply use file.filename: this may be usefult to keep
+        # separate when loading `cold`, and one wants to come back later.
+        return self.__h5__.filename
+
+    def _set_h5_filename(self, filename):
+        self.__h5__.filename = filename
+
+    def _set_h5_file(self, file):
+        self.__h5__.file = file
+        # when setting the handle, we will likely also want to set the filename
+        self._set_h5_filename(file.filename)
+

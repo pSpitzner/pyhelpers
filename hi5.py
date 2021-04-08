@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-03-26 12:19:50
+# @Last Modified: 2021-04-08 12:21:07
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -154,17 +154,23 @@ def close_hot(which="all"):
         _h5_files_currently_open["filenames"] = []
     # by index
     elif isinstance(which, int):
-        _h5_files_currently_open["files"][which].close()
         del _h5_files_currently_open["files"][which]
         del _h5_files_currently_open["filenames"][which]
+        try:
+            _h5_files_currently_open["files"][which].close()
+        except:
+            log.debug("File already closed")
     # by passed hdf5 file handle
     elif isinstance(which, h5py.File):
         _h5_files_currently_open["files"].remove(which)
         _h5_files_currently_open["filenames"].remove(which.filename)
-        which.close()
+        try:
+            which.close()
+        except:
+            log.debug("File already closed")
 
 def remember_file_is_hot(file):
-    # manual helper to keep a collection of open files
+    # helper to keep a collection of open files
     global _h5_files_currently_open
     _h5_files_currently_open["files"].append(file)
     _h5_files_currently_open["filenames"].append(file.filename)
@@ -261,13 +267,34 @@ class BetterDict(dict):
     """
 
     __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
+    # __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
+
+    # we want to clear subdirectories when overwriting with a dict.
+    # this is different from default behaviour of dicts but avoids memory leaks, or
+    # requiring to call `clear()` manually on the old key before overwriting.
+    def __setitem__(self, key, value):
+        # check key name is okay
+        if key in self.__dir__() and key not in self.keys():
+            raise NotImplementedError(f"Cannot set key/attribute `{key}`, it is native to BetterDict.")
+        if key in self.keys():
+            if isinstance(self[key], BetterDict):
+                self[key].clear()
+        super(BetterDict, self).__setitem__(key, value)
+
+    def __setattr__(self, key, value):
+        # check key name is okay
+        if key in self.__dir__() and key not in self.keys():
+            raise NotImplementedError(f"Cannot set key/attribute `{key}`, it is native to BetterDict.")
+        super(BetterDict, self).__setitem__(key, value)
+
+    # __setattr__ = __setitem__
 
     # copy everything
     def __deepcopy__(self, memo=None):
         return BetterDict(copy.deepcopy(dict(self), memo=memo))
 
+    # same as dict.keys()
     @property
     def varnames(self):
         return [*self]
@@ -353,12 +380,12 @@ class BetterDict(dict):
             left = f"{d['pcs'][l]}{d['scs'][l]}{d['varname'][l]}"
             right = f"{d['vartype'][l]}"
             ws = " " if d["vartype"][l] is "" else "."
-            res += f"{left} {ws*(62-len(left)-len(right))} {right}"
+            res += f"{left} {ws*(60-len(left)-len(right))} {right}"
             res += f"  {d['varval'][l]}\n" if len(d["varval"][l]) > 0 else "\n"
 
         return res
 
-    # enable autocompletion. man this is beautiful!
+    # enable attribute based autocompletion.
     def __dir__(self):
         res = dir(type(self)) + list(self.varnames)
         return res

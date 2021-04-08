@@ -2,16 +2,16 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2021-02-18 19:38:37
-# @Last Modified: 2021-03-24 08:43:33
+# @Last Modified: 2021-04-06 11:25:09
 # ------------------------------------------------------------------------------ #
 # Helper functions for dealing with colors
 # ------------------------------------------------------------------------------ #
-
 
 from matplotlib.colors import LinearSegmentedColormap as _ls
 from matplotlib.colors import to_hex, to_rgb, to_rgba, Normalize
 from matplotlib.patches import Rectangle as _Rectangle
 from matplotlib.colorbar import ColorbarBase as _ColorbarBase
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -262,3 +262,25 @@ def load_fig_from_pickle(path):
         fig = pickle.load(fid)
 
     return fig
+
+
+def alpha_to_solid_on_bg(base, alpha, bg="white"):
+    """
+        Probide a color to start from `base`, and give it opacity `alpha` on
+        the background color `bg`
+    """
+
+    def rgba_to_rgb(c, bg):
+        bg = matplotlib.colors.to_rgb(bg)
+        alpha = c[-1]
+
+        res = (
+            (1 - alpha) * bg[0] + alpha * c[0],
+            (1 - alpha) * bg[1] + alpha * c[1],
+            (1 - alpha) * bg[2] + alpha * c[2],
+        )
+        return res
+
+    new_base = list(matplotlib.colors.to_rgba(base))
+    new_base[3] = alpha
+    return matplotlib.colors.to_hex(rgba_to_rgb(new_base, bg))

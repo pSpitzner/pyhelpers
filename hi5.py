@@ -64,7 +64,7 @@ def load(filenames, dsetname, keepdim=False, raise_ex=False, silent=False):
             return res
         except Exception as e:
             if not silent:
-                log.error(f"failed to load {dsetname} from {filename}")
+                log.error(f"failed to load {dsetname} from {filename}: {e}")
             if raise_ex:
                 raise e
             else:
@@ -190,7 +190,7 @@ def recursive_ls(filename, dsetname=""):
     return res
 
 
-def recursive_load(filename, dsetname="/", skip=None, hot=False):
+def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False):
     """
         Load a hdf5 file as a nested BetterDict.
 
@@ -240,9 +240,9 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False):
                     temp[cp] = BetterDict()
                 else:
                     if hot:
-                        temp[cp] = load_hot(filename, cd)
+                        temp[cp] = load_hot(filename, cd, keepdim)
                     else:
-                        temp[cp] = load(filename, cd)
+                        temp[cp] = load(filename, cd, keepdim)
 
     return res
 
@@ -273,14 +273,14 @@ class BetterDict(dict):
     # we want to clear subdirectories when overwriting with a dict.
     # this is different from default behaviour of dicts but avoids memory leaks, or
     # requiring to call `clear()` manually on the old key before overwriting.
-    def __setitem__(self, key, value):
-        # check key name is okay
-        if key in self.__dir__() and key not in self.keys():
-            raise NotImplementedError(f"Cannot set key/attribute `{key}`, it is native to BetterDict.")
-        if key in self.keys():
-            if isinstance(self[key], BetterDict):
-                self[key].clear()
-        super(BetterDict, self).__setitem__(key, value)
+    # def __setitem__(self, key, value):
+    #     # check key name is okay
+    #     if key in self.__dir__() and key not in self.keys():
+    #         raise NotImplementedError(f"Cannot set key/attribute `{key}`, it is native to BetterDict.")
+    #     if key in self.keys():
+    #         if isinstance(self[key], BetterDict):
+    #             self[key].clear()
+    #     super(BetterDict, self).__setitem__(key, value)
 
     def __setattr__(self, key, value):
         # check key name is okay
@@ -379,7 +379,7 @@ class BetterDict(dict):
         for l in range(0, len(d["varname"])):
             left = f"{d['pcs'][l]}{d['scs'][l]}{d['varname'][l]}"
             right = f"{d['vartype'][l]}"
-            ws = " " if d["vartype"][l] is "" else "."
+            ws = " " if d["vartype"][l] == "" else "."
             res += f"{left} {ws*(60-len(left)-len(right))} {right}"
             res += f"  {d['varval'][l]}\n" if len(d["varval"][l]) > 0 else "\n"
 

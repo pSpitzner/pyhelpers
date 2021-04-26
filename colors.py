@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2021-02-18 19:38:37
-# @Last Modified: 2021-04-06 11:25:09
+# @Last Modified: 2021-04-14 10:27:33
 # ------------------------------------------------------------------------------ #
 # Helper functions for dealing with colors
 # ------------------------------------------------------------------------------ #
@@ -77,6 +77,40 @@ palettes["bambus"] = [
     (0.25, "#8FA96D"),
     (0.5, "#9C794F"),
     (1, "#3F2301"),
+]
+
+palettes["div_red_yellow_blue"] = [
+    (0.0, "#f94144"),
+    (0.2, "#f3722c"),
+    (0.3, "#f8961e"),
+    (0.5, "#f9c74f"),
+    (0.7, "#90be6d"),
+    (0.8, "#43aa8b"),
+    (1.0, "#577590"),
+]
+
+palettes["div_red_white_blue"] = [
+    (0.0, "#233954"),
+    (0.25, "#8d99ae"),
+    (0.5, "#edf2f4"),
+    (0.75, "#ef233c"),
+    (1.0, "#d90429"),
+]
+
+palettes["div_pastel_1"] = [
+    (0, "#C31B2B"),
+    (0.25, "#ffad7e"),
+    (0.5, "#E7E7B6"),
+    (0.85, "#195571"),
+    (1, "#011A39"),
+]
+
+palettes["div_pastel_2"] = [
+    (0.0,"#641002"),
+    (0.25,"#D82C0E"),
+    (0.5,"#FFD500"),
+    (0.75,"#B8E0FF"),
+    (1.0,"#F0FBFF"),
 ]
 
 
@@ -200,7 +234,6 @@ def demo_cmap(palette="hot", Nmax=7, edge=True):
                 )
             )
 
-
     # add the full color bar to the right
     cbax = axes[1]
     cbar = _ColorbarBase(
@@ -216,8 +249,9 @@ def demo_cmap(palette="hot", Nmax=7, edge=True):
 
     return fig, axes
 
+
 # this should go elsewhere
-def save_all_figures(path, **kwargs):
+def save_all_figures(path, save_pickle=False, **kwargs):
     """
         saves all open figures as pdfs and pickle. to load an existing figure:
         ```
@@ -227,38 +261,45 @@ def save_all_figures(path, **kwargs):
         ```
     """
     import os
+
     path = os.path.expanduser(path)
     assert os.path.isdir(path)
 
     try:
         import pickle
-        pickle_installed = True
     except ImportError:
-        pickle_installed = False
+        if pickle:
+            log.info("Failed to import pickle")
+            save_pickle = False
 
     try:
         from tqdm import tqdm
     except ImportError:
+
         def tqdm(*args):
             return iter(*args)
 
     if "dpi" not in kwargs:
         kwargs["dpi"] = 300
+    if "transparent" not in kwargs:
+        kwargs["transparent"] = True
 
     for i in tqdm(plt.get_fignums()):
         fig = plt.figure(i)
         fig.savefig(f"{path}/figure_{i}.pdf", **kwargs)
-        if pickle_installed:
+        if save_pickle:
             try:
                 os.makedirs(f"{path}/pickle/", exist_ok=True)
-                with open(f"{path}/pickle/figure_{i}.pkl",'wb') as fid:
+                with open(f"{path}/pickle/figure_{i}.pkl", "wb") as fid:
                     pickle.dump(fig, fid)
             except Exception as e:
                 print(e)
 
+
 def load_fig_from_pickle(path):
     import pickle
-    with open('/path/to/fig.pkl','rb') as fid:
+
+    with open("/path/to/fig.pkl", "rb") as fid:
         fig = pickle.load(fid)
 
     return fig

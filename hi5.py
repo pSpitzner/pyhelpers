@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-04-08 12:21:07
+# @Last Modified: 2021-05-07 18:08:16
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -127,14 +127,17 @@ def load_hot(filename, dsetname, keepdim=False):
         idx = _h5_files_currently_open["filenames"].index(filename)
         file = _h5_files_currently_open["files"][idx]
 
-    # if its a single value, load it nonetheless
-    if file[dsetname].shape == (1,) and not keepdim:
-        return file[dsetname][0]
-    elif file[dsetname].shape == ():
-        return file[dsetname][()]
-    else:
-        return file[dsetname]
-
+    try:
+        # if its a xsingle value, load it even though this is 'hot'
+        if file[dsetname].shape == (1,) and not keepdim:
+            return file[dsetname][0]
+        elif file[dsetname].shape == ():
+            return file[dsetname][()]
+        else:
+            return file[dsetname]
+    except Exception as e:
+        log.error(f"Failed to load hot {filename} {dsetname}")
+        raise e
 
 def close_hot(which="all"):
     """

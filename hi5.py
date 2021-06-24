@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-05-07 18:08:16
+# @Last Modified: 2021-06-23 17:51:02
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -28,6 +28,21 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-8s [%(name)s] %(message)s")
 log = logging.getLogger(__name__)
+
+_benedict_is_installed = False
+_addict_is_installed = False
+try:
+    from benedict import benedict
+    _benedict_is_installed = True
+except ImportError:
+    log.debug("benedict is not installed")
+
+try:
+    from addict import Dict
+    _addict_is_installed = True
+except ImportError:
+    log.debug("addict is not installed")
+
 
 
 def load(filenames, dsetname, keepdim=False, raise_ex=False, silent=False):
@@ -193,9 +208,10 @@ def recursive_ls(filename, dsetname=""):
     return res
 
 
-def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False):
+def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False, dtype = None):
     """
-        Load a hdf5 file as a nested BetterDict.
+        Load a hdf5 file as a nested dict.
+        enhenced dicts via benedict or addict are supported via `type` argument
 
         # Paramters:
         skip : list
@@ -203,20 +219,50 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False):
         hot : bool
             if True, does not load dsets to ram, but only links to the hdf5 file. this keeps the file open, call `close_hot()` when done!
             Use this if a dataset in your file is ... big
+        keepdim : set to true to preserve original data-set shape for 1d arrays
+            instead of casting to numbers
+        type : str, type or None
+            which dictionary class to use. Default, None uses a normal dict,
+            "benedict" or "addict" use those types,
+            if a type is passed, it is assumed to be a subclass of a normal dict and will be called as the constructor
     """
+
+    if dtype is None:
+        dtype = dict
+    elif isinstance(dtype, str):
+        if dtype.lower() == "benedict":
+            assert _benedict_is_installed, "try `pip install python-benedict`"
+            dtype = benedict
+        elif dtype.lower() == "addict":
+            assert _addict_is_installed, "try `pip install addict`"
+            dtype = Dict
+        else:
+            raise ValueError("unsupported value passed for `dtype`")
+    else:
+        assert isinstance(dtype, type), "unsupported value passed for `dtype`"
+
     if skip is not None:
         assert isinstance(skip, list)
     else:
         skip = []
 
+    assert isinstance(hot, bool)
+    assert isinstance(keepdim, bool)
+    assert isinstance(dsetname, str)
+    assert isinstance(filename, str)
+
     candidates = recursive_ls(filename, dsetname)
 
     cd_len = []
-    res = BetterDict()
-    res._set_h5_filename(filename)
+    # res = BetterDict()
+    # res._set_h5_filename(filename)
+    res = dtype()
+    res["h5"] = dtype()
+    res["h5"]["filename"] = filename
     if hot:
         f = h5py.File(filename, "r")
-        res._set_h5_file(f)
+        # res._set_h5_file(f)
+        res["h5"]["file"] = f
         remember_file_is_hot(f)
 
     maxdepth = 0
@@ -240,7 +286,8 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False):
                         temp = temp[cp]
                 cp = components[-1]
                 if len(ls(filename, cd)) > 0:
-                    temp[cp] = BetterDict()
+                    # temp[cp] = BetterDict()
+                    temp[cp] = dtype()
                 else:
                     if hot:
                         temp[cp] = load_hot(filename, cd, keepdim)

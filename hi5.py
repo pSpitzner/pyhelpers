@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-06-23 17:51:02
+# @Last Modified: 2021-11-16 14:21:33
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -43,6 +43,91 @@ try:
 except ImportError:
     log.debug("addict is not installed")
 
+
+def _recursive_tree(d, t=None, depth=0):
+    # helper to call recursively and build the tree structure of the content
+    if t is None:
+        t = {key: [] for key in ["pcs", "scs", "varname", "varval", "vartype"]}
+        t["prev_pc"] = ""
+
+    for vdx, var in enumerate(d.keys()):
+        if vdx < len(d.keys()) - 1:
+            sc = "├── "
+            pc = "│   "
+        else:
+            sc = "└── "
+            pc = "    "
+
+        t["pcs"].append(t["prev_pc"])
+        t["scs"].append(sc)
+        t["varname"].append(var)
+
+        if isinstance(d[var], dict):
+            # get all content of the dict, while incrementing the padding `pc`
+            t["vartype"].append("")
+            t["varval"].append("")
+            t["prev_pc"] += pc
+            _recursive_tree(d[var], t, depth + 1)
+            t["prev_pc"] = t["prev_pc"][0:-4]
+        else:
+            # extract type and certain variables
+            t["vartype"].append(f"{d[var].__class__.__name__}")
+            # number
+            if isinstance(d[var], numbers.Number):
+                t["varval"].append(str(d[var]))
+            # numpy byte strings
+            elif isinstance(d[var], np.bytes_):
+                string = d[var].decode("UTF-8").replace("\n", " ")
+                if len(string) > 14:
+                    string = f"{string:.11s}..."
+                t["varval"].append(string)
+            # base strings
+            elif isinstance(d[var], str):
+                string = d[var].replace("\n", " ")
+                if len(string) > 14:
+                    string = f"{string:.11s}..."
+                t["varval"].append(string)
+            # numpy arrays, print shape
+            elif isinstance(d[var], np.ndarray):
+                t["varval"].append(f"{d[var].shape}")
+            # list, print length
+            elif isinstance(d[var], list):
+                t["varval"].append(f"({len(d[var])})")
+            # hdf5 datset
+            elif isinstance(d[var], h5py.Dataset):
+                try:
+                    # this will throw an exception if file is closed
+                    d[var].file
+                    t["varval"].append(f"{d[var].shape}")
+                except ValueError:
+                    t["varval"].append(f"(file closed)")
+            # unknown
+            else:
+                t["varval"].append("")
+
+    return t
+
+def view(d, width=82, fill=".", print_out=True):
+    """
+    ```
+    └── profile
+          ├── firstname ................. str  Fabio
+          └── lastname .................. str  Caccamo
+    ```
+    """
+    res = ""
+    p = _recursive_tree(d)
+    for l in range(0, len(p["varname"])):
+        left = f"{p['pcs'][l]}{p['scs'][l]}{p['varname'][l]}"
+        right = f"{p['vartype'][l]}"
+        ws = " " if p["vartype"][l] == "" else fill
+        res += f"{left} {ws*(width-len(left)-len(right))} {right}"
+        res += f"  {p['varval'][l]}\n" if len(p["varval"][l]) > 0 else "\n"
+
+    if print_out:
+        print(res)
+    else:
+        return res
 
 
 def load(filenames, dsetname, keepdim=False, raise_ex=False, silent=False):
@@ -221,7 +306,7 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False, 
             Use this if a dataset in your file is ... big
         keepdim : set to true to preserve original data-set shape for 1d arrays
             instead of casting to numbers
-        type : str, type or None
+        dtype : str, dtype or None
             which dictionary class to use. Default, None uses a normal dict,
             "benedict" or "addict" use those types,
             if a type is passed, it is assumed to be a subclass of a normal dict and will be called as the constructor
@@ -239,7 +324,8 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False, 
         else:
             raise ValueError("unsupported value passed for `dtype`")
     else:
-        assert isinstance(dtype, type), "unsupported value passed for `dtype`"
+        # assert isinstance(dtype, type), "unsupported value passed for `dtype`"
+        assert isinstance(dtype(), dict), "unsupported value passed for `dtype`"
 
     if skip is not None:
         assert isinstance(skip, list)
@@ -297,176 +383,5 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False, 
     return res
 
 
-class BetterDict(dict):
-    """
-        Class for loaded hdf5 files --- a tweaked dict that supports nesting
 
-        We inherit from dict and also provide keys as attributes, mapped to `.get()` of
-        dict. This avoids the KeyError: if getting parameters via `.the_parname`, we
-        return None when the param does not exist.
-        Avoid using keys that have the same name as class functions etc.
-
-        # Example
-        ```
-        >>> foo = BetterDict(lorem="ipsum")
-        >>> print(foo.lorem)
-        ipsum
-        >>> print(foo.does_not_exist is None)
-        True
-        ```
-    """
-
-    __getattr__ = dict.get
-    # __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-    # we want to clear subdirectories when overwriting with a dict.
-    # this is different from default behaviour of dicts but avoids memory leaks, or
-    # requiring to call `clear()` manually on the old key before overwriting.
-    # def __setitem__(self, key, value):
-    #     # check key name is okay
-    #     if key in self.__dir__() and key not in self.keys():
-    #         raise NotImplementedError(f"Cannot set key/attribute `{key}`, it is native to BetterDict.")
-    #     if key in self.keys():
-    #         if isinstance(self[key], BetterDict):
-    #             self[key].clear()
-    #     super(BetterDict, self).__setitem__(key, value)
-
-    def __setattr__(self, key, value):
-        # check key name is okay
-        if key in self.__dir__() and key not in self.keys():
-            raise NotImplementedError(f"Cannot set key/attribute `{key}`, it is native to BetterDict.")
-        super(BetterDict, self).__setitem__(key, value)
-
-    # __setattr__ = __setitem__
-
-    # copy everything
-    def __deepcopy__(self, memo=None):
-        return BetterDict(copy.deepcopy(dict(self), memo=memo))
-
-    # same as dict.keys()
-    @property
-    def varnames(self):
-        return [*self]
-
-    @property
-    def depth(self):
-        maxdepth = 0
-        for vdx, var in enumerate(self.varnames):
-            if isinstance(self[var], BetterDict):
-                d = self[var].depth
-                if d > maxdepth:
-                    maxdepth = d
-        return maxdepth + 1
-
-    # helper to call recursively and build the tree structure of the content
-    def __recursive_tree__(self, d=None, depth=0):
-        if d is None:
-            d = {key: [] for key in ["pcs", "scs", "varname", "varval", "vartype"]}
-            d["prev_pc"] = ""
-
-        for vdx, var in enumerate(self.varnames):
-            if vdx < len(self.varnames) - 1:
-                sc = "├── "
-                pc = "│   "
-            else:
-                sc = "└── "
-                pc = "    "
-
-            d["pcs"].append(d["prev_pc"])
-            d["scs"].append(sc)
-            d["varname"].append(var)
-
-            if isinstance(self[var], BetterDict):
-                # get all content of the dict, while incrementing the padding `pc`
-                d["vartype"].append("")
-                d["varval"].append("")
-                d["prev_pc"] += pc
-                self[var].__recursive_tree__(d, depth + 1)
-                d["prev_pc"] = d["prev_pc"][0:-4]
-            else:
-                # extract type and certain variables
-                d["vartype"].append(f"{self[var].__class__.__name__}")
-                # number
-                if isinstance(self[var], numbers.Number):
-                    d["varval"].append(str(self[var]))
-                # numpy byte strings
-                elif isinstance(self[var], np.bytes_):
-                    string = self[var].decode("UTF-8").replace("\n", " ")
-                    if len(string) > 14:
-                        string = f"{string:.11s}..."
-                    d["varval"].append(string)
-                # base strings
-                elif isinstance(self[var], str):
-                    string = self[var].replace("\n", " ")
-                    if len(string) > 14:
-                        string = f"{string:.11s}..."
-                    d["varval"].append(string)
-                # numpy arrays, print shape
-                elif isinstance(self[var], np.ndarray):
-                    d["varval"].append(f"{self[var].shape}")
-                # list, print length
-                elif isinstance(self[var], list):
-                    d["varval"].append(f"({len(self[var])})")
-                # hdf5 datset
-                elif isinstance(self[var], h5py.Dataset):
-                    try:
-                        # this will throw an exception if file is closed
-                        self[var].file
-                        d["varval"].append(f"{self[var].shape}")
-                    except ValueError:
-                        d["varval"].append(f"(file closed)")
-                # unknown
-                else:
-                    d["varval"].append("")
-
-        return d
-
-    # printed representation
-    def __repr__(self):
-        res = ""
-        d = self.__recursive_tree__()
-        for l in range(0, len(d["varname"])):
-            left = f"{d['pcs'][l]}{d['scs'][l]}{d['varname'][l]}"
-            right = f"{d['vartype'][l]}"
-            ws = " " if d["vartype"][l] == "" else "."
-            res += f"{left} {ws*(60-len(left)-len(right))} {right}"
-            res += f"  {d['varval'][l]}\n" if len(d["varval"][l]) > 0 else "\n"
-
-        return res
-
-    # enable attribute based autocompletion.
-    def __dir__(self):
-        res = dir(type(self)) + list(self.varnames)
-        return res
-
-    # ------------------------------------------------------------------------------ #
-    # hdf5 related vodoo
-    # ------------------------------------------------------------------------------ #
-
-    # because we overloaded attributes with dict items, we cannot "store" any new
-    # attributes.
-    # workaround: have dummy object as an attribute for h5 stuff,
-    # where we can add attributes.
-    __h5__ = type('BetterDict_hdf5_attributes', (object,), {})()
-    __h5__.file = None
-    __h5__.filename = None
-
-    @property
-    def h5_file(self):
-        return self.__h5__.file
-
-    @property
-    def h5_filename(self):
-        # for now, do not simply use file.filename: this may be usefult to keep
-        # separate when loading `cold`, and one wants to come back later.
-        return self.__h5__.filename
-
-    def _set_h5_filename(self, filename):
-        self.__h5__.filename = filename
-
-    def _set_h5_file(self, file):
-        self.__h5__.file = file
-        # when setting the handle, we will likely also want to set the filename
-        self._set_h5_filename(file.filename)
 

@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2020-07-21 11:11:40
-# @Last Modified: 2021-11-16 14:21:33
+# @Last Modified: 2021-11-16 16:08:06
 # ------------------------------------------------------------------------------ #
 # Helper functions to work conveniently with hdf5 files
 #
@@ -383,5 +383,99 @@ def recursive_load(filename, dsetname="/", skip=None, hot=False, keepdim=False, 
     return res
 
 
+def recursive_write(filename, h5_data, h5_desc=None, **kwargs):
+    """
+        Write nested dictionaries to hdf5 files.
+        Completely overwrites the file at `filename`, purging all previous content.
+
+        Needs python-benedict.
+        Dict keys cannot contain "." or "/" characters.
+
+        Does not write subgroups of reserved keypath "/h5/"
+
+        todo: workaround for list of strings
+        todo: consistency checks between re-loaded an original data.
+            due to differing dtypes, so far, this is not ensured.
+
+        # Paramters
+        filename : str
+            path to (over) write the file to
+        h5_data : nested dictionaries
+            a dataset is created at each lowest level of the tree
+        h5_desc : nested dict
+            match strucutre of `h5_data`, containing descriptions that will be set
+            as the 'desc' attribute of the hdf5 dataset.
+            Note: this way we cannot set descriptions for groups, as parents (groups)
+            always correspond to a dict themselves
+        **kwargs :
+            are passed to dataset creation
+    """
+
+    from benedict import benedict
+
+    if h5_desc is None:
+        h5_desc = dict()
+
+    h5_data = benedict(h5_data, keypath_separator='/')
+    h5_desc = benedict(h5_desc, keypath_separator='/')
+
+    file = h5py.File(filename, "w")
+
+    for key in h5_data.keypaths():
+        try:
+            if key[0:2] == "h5":
+                continue
+        except:
+            pass
+
+        key_kwargs = kwargs.copy()
+        if isinstance(h5_data[key], dict):
+            target = file.require_group(f"/{key}")
+        else:
+            data = h5_data[key]
+            key_kwargs.setdefault("data", data)
+            key_kwargs.setdefault("compression", "gzip")
+
+            # scalars, and strings do not support compression
+            try:
+                d_len = len(data)
+                if isinstance(data, str):
+                    raise TypeError
+                if isinstance(data, np.bytes_):
+                    raise TypeError
+            except TypeError:
+                key_kwargs.pop("compression")
+
+            # print(f"{key} {type(data)}")
+            # print(key_kwargs)
+            # print(h5_data[key])
+            try:
+                target = file.create_dataset(f"/{key}", **key_kwargs)
+            except Exception as e:
+                log.error(f"key `{key}`: {data}")
+                log.error(f"  {e}")
+
+        # try:
+        #     target.attrs["description"] = h5_desc[key]
+        # except:
+        #     # no description specified for this key
+        #     pass
+
+    file.close()
 
 
+
+# def _check_for_string(data):
+    # workaround to store a list of strings (via object array) to hdf5
+    # dset = f_tar.create_dataset(
+    #     "/meta/axis_overview",
+    #     data=np.array(list(d_axes.keys()) + ["repetition"], dtype=object),
+    #     dtype=h5py.special_dtype(vlen=str),
+    # )
+
+
+# for key in h5f.keypaths():
+#     try:
+#         print(f"{key} {np.all(h5f[key] == h5f2[key])}")
+#     except Exception as e:
+#         print(f"{key} {e}")

@@ -2,7 +2,7 @@
 # @Author:        F. Paul Spitzner
 # @Email:         paul.spitzner@ds.mpg.de
 # @Created:       2021-02-18 19:38:37
-# @Last Modified: 2021-04-14 10:27:33
+# @Last Modified: 2021-11-11 14:24:20
 # ------------------------------------------------------------------------------ #
 # Helper functions for dealing with colors
 # ------------------------------------------------------------------------------ #
@@ -13,15 +13,16 @@ from matplotlib.patches import Rectangle as _Rectangle
 from matplotlib.colorbar import ColorbarBase as _ColorbarBase
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator, LogLocator
 import numpy as np
 
 palettes = dict()
 # good with edge = False
 palettes["cold"] = [
     (0, "0.92"),  # single float as a string for grayscale
-    (0.25, "#DCEDC8"),
+    (0.25, "#BEDA9D"),
     (0.45, "#42B3D5"),
-    (0.75, "#1A237E"),
+    (0.75, "#24295E"),
     (1, "black"),
 ]
 palettes["hot"] = [
@@ -113,6 +114,11 @@ palettes["div_pastel_2"] = [
     (1.0,"#F0FBFF"),
 ]
 
+palettes["grays"] = [
+    (0.0,"#999"),
+    (1.0,"#000"),
+]
+
 
 # enable the colormaps for matplotlib cmaps and getting discrete values, eg
 # cmap["pinks"](0.5)
@@ -120,6 +126,11 @@ cmap = dict()
 for key in palettes.keys():
     cmap[key] = _ls.from_list(key, palettes[key], N=512)
 
+
+def create_cmap(start="white", end="black", palette=None, N=512):
+    if palette is None:
+        palette = [(0.0, start), (1.0, end)]
+    return _ls.from_list("custom_colormap", palette, N=N)
 
 def cmap_cycle(palette="hot", N=5, edge=True):
     if palette not in palettes.keys():
@@ -251,7 +262,7 @@ def demo_cmap(palette="hot", Nmax=7, edge=True):
 
 
 # this should go elsewhere
-def save_all_figures(path, save_pickle=False, **kwargs):
+def save_all_figures(path, fmt="pdf", save_pickle=False, **kwargs):
     """
         saves all open figures as pdfs and pickle. to load an existing figure:
         ```
@@ -286,7 +297,7 @@ def save_all_figures(path, save_pickle=False, **kwargs):
 
     for i in tqdm(plt.get_fignums()):
         fig = plt.figure(i)
-        fig.savefig(f"{path}/figure_{i}.pdf", **kwargs)
+        fig.savefig(f"{path}/figure_{i}.{fmt}", **kwargs)
         if save_pickle:
             try:
                 os.makedirs(f"{path}/pickle/", exist_ok=True)
@@ -325,3 +336,220 @@ def alpha_to_solid_on_bg(base, alpha, bg="white"):
     new_base = list(matplotlib.colors.to_rgba(base))
     new_base[3] = alpha
     return matplotlib.colors.to_hex(rgba_to_rgb(new_base, bg))
+
+
+
+
+def set_size(ax, w, h):
+    """
+        set the size of an axis, where the size describes the actual area of the plot,
+        _excluding_ the axes, ticks, and labels.
+
+        w, h: width, height in cm
+
+        # Example
+        ```
+            cm = 2.54
+            fig, ax = plt.subplots()
+            ax.plot(stuff)
+            fig.tight_layout()
+            _set_size(ax, 3.5*cm, 4.5*cm)
+        ```
+    """
+    # https://stackoverflow.com/questions/44970010/axes-class-set-explicitly-size-width-height-of-axes-in-given-units
+    l = ax.figure.subplotpars.left
+    r = ax.figure.subplotpars.right
+    t = ax.figure.subplotpars.top
+    b = ax.figure.subplotpars.bottom
+    figw = float(w/2.54) / (r - l)
+    figh = float(h/2.54) / (t - b)
+    ax.figure.set_size_inches(figw, figh)
+
+
+def set_size2(ax, w, h):
+    # https://newbedev.com/axes-class-set-explicitly-size-width-height-of-axes-in-given-units
+    from mpl_toolkits.axes_grid1 import Divider, Size
+    axew = w/2.54
+    axeh = h/2.54
+
+    #lets use the tight layout function to get a good padding size for our axes labels.
+    # fig = plt.gcf()
+    # ax = plt.gca()
+    fig = ax.get_figure()
+    fig.tight_layout()
+    #obtain the current ratio values for padding and fix size
+    oldw, oldh = fig.get_size_inches()
+    l = ax.figure.subplotpars.left
+    r = ax.figure.subplotpars.right
+    t = ax.figure.subplotpars.top
+    b = ax.figure.subplotpars.bottom
+
+    #work out what the new  ratio values for padding are, and the new fig size.
+    neww = axew+oldw*(1-r+l)
+    newh = axeh+oldh*(1-t+b)
+    newr = r*oldw/neww
+    newl = l*oldw/neww
+    newt = t*oldh/newh
+    newb = b*oldh/newh
+
+    #right(top) padding, fixed axes size, left(bottom) pading
+    hori = [Size.Scaled(newr), Size.Fixed(axew), Size.Scaled(newl)]
+    vert = [Size.Scaled(newt), Size.Fixed(axeh), Size.Scaled(newb)]
+
+    divider = Divider(fig, (0.0, 0.0, 1., 1.), hori, vert, aspect=False)
+    # the width and height of the rectangle is ignored.
+
+    ax.set_axes_locator(divider.new_locator(nx=1, ny=1))
+
+    #we need to resize the figure now, as we have may have made our axes bigger than in.
+    fig.set_size_inches(neww,newh)
+
+
+def set_size3(ax, w, h):
+    # https://newbedev.com/axes-class-set-explicitly-size-width-height-of-axes-in-given-units
+    from mpl_toolkits.axes_grid1 import Divider, Size
+    axew = w/2.54
+    axeh = h/2.54
+
+    #lets use the tight layout function to get a good padding size for our axes labels.
+    # fig = plt.gcf()
+    # ax = plt.gca()
+    fig = ax.get_figure()
+    fig.tight_layout()
+    #obtain the current ratio values for padding and fix size
+    oldw, oldh = fig.get_size_inches()
+    l = ax.figure.subplotpars.left
+    r = ax.figure.subplotpars.right
+    t = ax.figure.subplotpars.top
+    b = ax.figure.subplotpars.bottom
+
+    #work out what the new  ratio values for padding are, and the new fig size.
+    # ps: adding a bit to neww and newh gives more padding
+    # the axis size is set from axew and axeh
+    neww = axew+oldw*(1-r+l)+.4
+    newh = axeh+oldh*(1-t+b)+.4
+    newr = r*oldw/neww -.4
+    newl = l*oldw/neww +.4
+    newt = t*oldh/newh -.4
+    newb = b*oldh/newh +.4
+
+    #right(top) padding, fixed axes size, left(bottom) pading
+    hori = [Size.Scaled(newr), Size.Fixed(axew), Size.Scaled(newl)]
+    vert = [Size.Scaled(newt), Size.Fixed(axeh), Size.Scaled(newb)]
+
+    divider = Divider(fig, (0.0, 0.0, 1., 1.), hori, vert, aspect=False)
+    # the width and height of the rectangle is ignored.
+
+    ax.set_axes_locator(divider.new_locator(nx=1, ny=1))
+
+    #we need to resize the figure now, as we have may have made our axes bigger than in.
+    fig.set_size_inches(neww,newh)
+
+def _style_legend(leg):
+    """
+        a legend style I use frequently
+
+        # Example
+        ```
+            fig, ax = plt.subplots()
+            leg = ax.legend()
+            _style_legend(leg)
+
+        ```
+    """
+    leg.get_frame().set_linewidth(0.0)
+    leg.get_frame().set_facecolor("#e4e5e6")
+    leg.get_frame().set_alpha(0.9)
+
+
+def _legend_into_new_axes(ax):
+    """
+        draw a legend into a new figure, e.g. for customizing
+    """
+    cm = 1/2.54
+    fig, ax_leg = plt.subplots(figsize=(6 * cm, 6 * cm))
+    h, l = ax.get_legend_handles_labels()
+    ax_leg.axis("off")
+    leg = ax_leg.legend(h, l, loc="upper left")
+
+    return leg
+
+
+def get_shifted_formatter(shift=-60, fmt=".1f"):
+    """
+        # Example
+        ```
+        ax.xaxis.set_major_formatter(get_formatter_shifted(shift=-120))
+        ```
+    """
+    def formatter(x, pos):
+        return "{{:{}}}".format(fmt).format(x + shift)
+    return formatter
+
+def _ticklabels_lin_to_log10(x, pos):
+    """
+        converts ticks of manually logged data (lin ticks) to log ticks, as follows
+         1 -> 10
+         0 -> 1
+        -1 -> 0.1
+
+        # Example
+        ```
+        ax.xaxis.set_major_formatter(
+            matplotlib.ticker.FuncFormatter(_ticklabels_lin_to_log10_power)
+        )
+        ax.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(1))
+        ax.xaxis.set_minor_locator(_ticklocator_lin_to_log_minor())
+        ```
+    """
+    prec = int(np.ceil(-np.minimum(x, 0)))
+    return "{{:.{:1d}f}}".format(prec).format(np.power(10.0, x))
+
+
+def _ticklabels_lin_to_log10_power(x, pos, nicer=True, nice_range=[-1, 0, 1]):
+    """
+        converts ticks of manually logged data (lin ticks) to log ticks, as follows
+         1 -> 10^1
+         0 -> 10^0
+        -1 -> 10^-1
+    """
+    if x.is_integer():
+        # use easy to read formatter if exponents are close to zero
+        if nicer and x in nice_range:
+            return _ticklabels_lin_to_log10(x, pos)
+        else:
+            return r"$10^{{{:d}}}$".format(int(x))
+    else:
+        # return r"$10^{{{:f}}}$".format(x)
+        return ""
+
+
+def _ticklocator_lin_to_log_minor(vmin=-10, vmax=10, nbins=10):
+    """
+        get minor ticks on when manually converting lin to log
+    """
+    locs = []
+    orders = int(np.ceil(vmax - vmin))
+    for o in range(int(np.floor(vmin)), int(np.floor(vmax + 1)), 1):
+        locs.extend([o + np.log10(x) for x in range(2, 10)])
+    return matplotlib.ticker.FixedLocator(locs, nbins=nbins * orders)
+
+
+def _fix_log_ticks(ax_el, every=1, hide_label_condition=lambda idx: False):
+    """
+        this can adapt log ticks to only show every second tick, or so.
+
+        # Parameters
+        ax_el: usually `ax.yaxis`
+        every: 1 or 2
+        hide_label_condition : function e.g. `lambda idx: idx % 2 == 0`
+    """
+    ax_el.set_major_locator(LogLocator(base=10, numticks=10))
+    ax_el.set_minor_locator(
+        LogLocator(base=10.0, subs=np.arange(0, 1.05, every / 10), numticks=10)
+    )
+    ax_el.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    for idx, lab in enumerate(ax_el.get_ticklabels()):
+        # print(idx, lab, hide_label_condition(idx))
+        if hide_label_condition(idx):
+            lab.set_visible(False)

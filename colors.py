@@ -337,10 +337,29 @@ def alpha_to_solid_on_bg(base, alpha, bg="white"):
     new_base[3] = alpha
     return matplotlib.colors.to_hex(rgba_to_rgb(new_base, bg))
 
+def fade(k, n, start=1, stop=0.4, invert=False):
+    """
+    helper to get stepwise lower alphas at same color.
+    n = total steps
+    k = current step, going from 0 to n-1
+    start = maximum obtained value
+    stop = minimum obtained value
+    """
+
+    if n <= 1:
+        return 1
+
+    if invert:
+        frac = (k) / (n-1)
+    else:
+        frac = (n-1-k) / (n-1)
+    alpha = stop + (start-stop) * frac
+    return alpha
 
 
 
-def set_size(ax, w, h):
+
+def set_size(ax, w, h=None):
     """
         set the size of an axis, where the size describes the actual area of the plot,
         _excluding_ the axes, ticks, and labels.
@@ -362,8 +381,11 @@ def set_size(ax, w, h):
     t = ax.figure.subplotpars.top
     b = ax.figure.subplotpars.bottom
     figw = float(w/2.54) / (r - l)
-    figh = float(h/2.54) / (t - b)
-    ax.figure.set_size_inches(figw, figh)
+    if h is None:
+        ax.figure.set_figwidth(figw)
+    else:
+        figh = float(h/2.54) / (t - b)
+        ax.figure.set_size_inches(figw, figh)
 
 
 def set_size2(ax, w, h):
